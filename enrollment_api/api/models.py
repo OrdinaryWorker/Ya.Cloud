@@ -20,3 +20,4 @@ class File(models.Model):
                                  default=None
                                  )
     date = models.DateTimeField(default=None, null=True)
+    # date = models.DateTimeField()

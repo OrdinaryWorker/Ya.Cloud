@@ -4,6 +4,7 @@ from .models import File
 from rest_framework.decorators import api_view  # Импортировали декоратор
 from rest_framework.response import Response  # Импортировали класс Response
 from rest_framework import status
+from datetime import datetime, timedelta
 
 
 @api_view(['POST'])
@@ -16,9 +17,13 @@ def file_imports(request):
             item_dict["date"] = request.data["updateDate"]
             items_list.append(item_dict)
             serializer = FileSerializer(data=item_dict)
-            if serializer.is_valid():
-                item = serializer.save()
-            else:
+            if not serializer.is_valid():
+
+                return Response(serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST
+                                )
+            item = serializer.save()
+            if not item:
                 return Response(serializer.errors,
                                 status=status.HTTP_400_BAD_REQUEST
                                 )
@@ -60,7 +65,10 @@ def files_nodes(request):
 
 @api_view(['GET'])
 def file_nodes(request, pk):
-    item = File.objects.get(id=pk)
+    try:
+        item = File.objects.get(id=pk)
+    except ObjectDoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
     serializer = FileSerializer(item)
     if item.type == 'FOLDER':
         item_dict = dict(serializer.data)
@@ -94,7 +102,7 @@ def file_delete(request, pk):
     except ObjectDoesNotExist:
         message = "Item not found"
         return Response(message, status=status.HTTP_404_NOT_FOUND)
-    date = request.data.get("date")
+    date = request.query_params.get("date")
     if not date:
         message = 'Validation Failed'
         return Response(message, status=status.HTTP_400_BAD_REQUEST)
@@ -107,3 +115,14 @@ def file_delete(request, pk):
     update_parents(request, item, item.size, item.date)
     item.delete()
     return Response(status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def files_updates(request):
+    # end_time = datetime.strptime(request.data.get("date"), "%Y-%m-%dT%H:%M:%SZ")
+    end_time = datetime.strptime(request.query_params.get("date"),
+                                 "%Y-%m-%dT%H:%M:%SZ")
+    start_time = end_time - timedelta(hours=24)
+    files = File.objects.filter(type='FILE', date__range=[start_time, end_time])
+    serializer = FileSerializer(files, many=True)
+    return Response(data=serializer.data, status=status.HTTP_200_OK)
