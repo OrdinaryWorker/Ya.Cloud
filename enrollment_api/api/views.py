@@ -1,4 +1,4 @@
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist,ValidationError
 from .serializers import FileSerializer
 from .models import File
 from rest_framework.decorators import api_view  # Импортировали декоратор
@@ -13,21 +13,42 @@ def file_imports(request):
     if isinstance(items, list):
         for i in range(len(items)):
             item_dict = items[i]
-            item_dict["updateDate"] = request.data["updateDate"]
+            item_dict["date"] = request.data["updateDate"]
             items_list.append(item_dict)
             serializer = FileSerializer(data=item_dict)
             if serializer.is_valid():
-                serializer.save()
+                item = serializer.save()
             else:
                 return Response(serializer.errors,
                                 status=status.HTTP_400_BAD_REQUEST
                                 )
-        
+            update_parents(request, item, item.size, item.date)
         return Response(items_list,
-                        status=status.HTTP_201_CREATED)
+                        status=status.HTTP_200_OK)
     else:
         message = 'Введены некорректные данные'
         return Response(message, status=status.HTTP_400_BAD_REQUEST)
+
+
+def update_parents(request, obj, size, date):
+    try:
+        parent_item = File.objects.get(id=obj.parentId_id)
+    except ObjectDoesNotExist:
+        parent_item = None
+    if parent_item:
+
+        if obj.size is not None:
+            if parent_item.size is None:
+                parent_item.size = 0
+            if request.method == 'POST':
+                parent_item.size += size
+                parent_item.date = date
+            else:
+                parent_item.size -= size
+                parent_item.date = date
+        parent_item.save()
+        return update_parents(request, parent_item, size, date)
+    return parent_item
 
 
 @api_view(['GET'])
@@ -43,7 +64,7 @@ def file_nodes(request, pk):
     serializer = FileSerializer(item)
     if item.type == 'FOLDER':
         item_dict = dict(serializer.data)
-        item_dict['children'], item_dict['size'] = get_children(item)
+        item_dict['children'] = get_children(item)
     else:
         item_dict = serializer.data
     return Response(item_dict, status=status.HTTP_200_OK)
@@ -51,21 +72,19 @@ def file_nodes(request, pk):
 
 def get_children(item):
     children = File.objects.filter(parentId=item.pk)
-    item_size = 0
     child_list = []
     for child in children:
         if child.type == 'FILE':
-            item_size += int(child.size)
             child_serializer = FileSerializer(child)
             child_dict = dict(child_serializer.data)
+            child_dict['children'] = None
             child_list.append(child_dict)
         else:
             child_serializer = FileSerializer(child)
             child_dict = dict(child_serializer.data)
-            child_dict['children'], child_dict['size'] = get_children(child)
-            item_size += int(child_dict['size'])
+            child_dict['children'] = get_children(child)
             child_list.append(child_dict)
-    return child_list, item_size
+    return child_list
 
 
 @api_view(['DELETE'])
@@ -75,9 +94,16 @@ def file_delete(request, pk):
     except ObjectDoesNotExist:
         message = "Item not found"
         return Response(message, status=status.HTTP_404_NOT_FOUND)
-    if request.data.get("date") != item.updateDate:
+    date = request.data.get("date")
+    if not date:
         message = 'Validation Failed'
         return Response(message, status=status.HTTP_400_BAD_REQUEST)
-
+    item.date = date
+    try:
+        item.save()
+    except ValidationError:
+        message = 'Validation Error for date field'
+        return Response(message, status=status.HTTP_400_BAD_REQUEST)
+    update_parents(request, item, item.size, item.date)
     item.delete()
     return Response(status=status.HTTP_200_OK)
