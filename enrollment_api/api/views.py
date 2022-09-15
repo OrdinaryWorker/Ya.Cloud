@@ -14,6 +14,7 @@ from .treatment_functions import (check_not_valid_serializer, check_response,
 
 @api_view(['POST'])
 def file_imports(request):
+    logger.info('Отправлен запрос на /imports')
     if not check_response(request):
 
         return Response(status=status.HTTP_400_BAD_REQUEST)
@@ -95,7 +96,7 @@ def file_delete(request, pk):
 
 @api_view(['GET'])
 def files_updates(request):
-    logger.info('Отправлен запрос на updates/')
+    logger.info('Отправлен запрос на /updates')
     try:
         date = request.query_params["date"]
     except KeyError:
@@ -115,7 +116,7 @@ def files_updates(request):
 
 @api_view(['GET'])
 def file_history(request, pk):
-    logger.info('Отправлен запрос на history/')
+    logger.info('Отправлен запрос на /history/')
     file = get_object_or_404(File, id=pk)
 
     start_time = request.data.get("dateStart")

@@ -5,7 +5,8 @@ from .models import File
 from .serializers import FileSerializer
 
 
-def check_response(request):
+def check_response(request) -> bool:
+    """Функция проверяет наличие обязательных ключей в теле запроса"""
     try:
         request.data["items"]
     except KeyError:
@@ -19,7 +20,10 @@ def check_response(request):
     return True
 
 
-def check_not_valid_serializer(item_dict):
+def check_not_valid_serializer(item_dict: dict) -> bool:
+    """Функция осуществляет дополнительную проверку входных данных в случае,
+    если сериализатор нашел ошибку, выполняется перед запуском
+     обновления файла"""
     try:
         pk = item_dict['id']
     except KeyError:
@@ -32,7 +36,9 @@ def check_not_valid_serializer(item_dict):
             File.objects.get(id=pk).type == item_type)
 
 
-def get_children(item):
+def get_children(item: File) -> list:
+    """Функция рекуррентно проходит по файлам у которых parentId = id файла
+    и добавляет их в список для вывода"""
     children = File.objects.filter(parentId=item.pk)
     child_list = []
     for child in children:
@@ -50,6 +56,8 @@ def get_children(item):
 
 
 def update_file(flag, new_item):
+    """Функция замены текущей версии файла на новую версию и добавляет в
+     атрибут changes_history ссылку на объект старой версии файла"""
     current_id = new_item['id']
     new_id = get_hash_id(current_id)
     new_item['id'] = new_id
@@ -79,6 +87,7 @@ def update_file(flag, new_item):
 
 
 def update_parents(flag, obj, size, date):
+    """Функция обновляет параметры size и date у родительских объектов файла"""
     try:
         parent_item = File.objects.get(id=obj.parentId_id)
     except ObjectDoesNotExist:
@@ -100,10 +109,13 @@ def update_parents(flag, obj, size, date):
 
 
 def get_hash_id(item_id):
+    """Функция создает уникальный id для старых версий файлов"""
     return str(hash(item_id + str(random.randint(0, 1000))))
 
 
 def do_files_tuple_changing(prev_file, upd_file):
+    """Функция перезаписывает атрибуты новой версии файла в уже существующую
+     версию и возвращает списки с соответствующими атрибутами"""
     prev_serializer = FileSerializer(prev_file)
     upd_serializer = FileSerializer(upd_file)
     prev = dict(prev_serializer.data)
