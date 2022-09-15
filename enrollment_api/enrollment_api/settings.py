@@ -9,9 +9,18 @@ https://docs.djangoproject.com/en/2.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.2/ref/settings/
 """
-
+import logging
 import os
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    filename='logs.log',
+    format='%(asctime)s - %(funcName)s - %(levelname)s - %(message)s',
+    filemode='a'
+)
+
+logger = logging.getLogger(__name__)
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

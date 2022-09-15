@@ -272,7 +272,7 @@ def test_all():
     test_nodes()
     test_updates()
     test_delete()
-    test_history()
+    # test_history()
 
 def main():
     global API_BASEURL

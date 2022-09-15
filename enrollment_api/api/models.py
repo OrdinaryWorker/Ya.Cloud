@@ -2,7 +2,9 @@ from django.db import models
 
 
 class File(models.Model):
-    id = models.CharField(max_length=200, primary_key=True)
+    id = models.CharField(max_length=200,
+                          primary_key=True
+                          )
     type = models.CharField(
         max_length=6,
         choices=(
@@ -11,13 +13,25 @@ class File(models.Model):
         )
 
     )
-    url = models.CharField(unique=True, max_length=255, default=None, null=True)
-    size = models.IntegerField(default=None, null=True)
+    url = models.CharField(unique=True,
+                           max_length=255,
+                           default=None,
+                           null=True
+                           )
+    size = models.IntegerField(default=None,
+                               null=True
+                               )
     parentId = models.ForeignKey('self',
                                  on_delete=models.CASCADE,
                                  blank=True,
                                  null=True,
                                  default=None
                                  )
-    date = models.DateTimeField(default=None, null=True)
-    # date = models.DateTimeField()
+    date = models.DateTimeField(null=False)
+    changes_history = models.ForeignKey('self',
+                                        on_delete=models.CASCADE,
+                                        blank=True,
+                                        null=True,
+                                        default=None,
+                                        related_name='new_file_version'
+                                        )

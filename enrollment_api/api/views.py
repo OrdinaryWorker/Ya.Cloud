@@ -1,66 +1,55 @@
-from django.core.exceptions import ObjectDoesNotExist,ValidationError
-from .serializers import FileSerializer
-from .models import File
-from rest_framework.decorators import api_view  # Импортировали декоратор
-from rest_framework.response import Response  # Импортировали класс Response
-from rest_framework import status
 from datetime import datetime, timedelta
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from .models import File
+from .serializers import FileSerializer
+from enrollment_api.settings import logger
+from .treatment_functions import (check_not_valid_serializer, check_response,
+                                  get_children, update_file, update_parents)
 
 
 @api_view(['POST'])
 def file_imports(request):
-    items = request.data.get("items")
-    items_list = []
-    if isinstance(items, list):
-        for i in range(len(items)):
-            item_dict = items[i]
-            item_dict["date"] = request.data["updateDate"]
-            items_list.append(item_dict)
-            serializer = FileSerializer(data=item_dict)
-            if not serializer.is_valid():
+    if not check_response(request):
 
-                return Response(serializer.errors,
-                                status=status.HTTP_400_BAD_REQUEST
-                                )
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+    items_list = []
+    items = request.data['items']
+
+    for i in range(len(items)):
+        item_dict = items[i]
+        item_dict["date"] = request.data["updateDate"]
+        serializer = FileSerializer(data=item_dict)
+        if serializer.is_valid():
             item = serializer.save()
             if not item:
                 return Response(serializer.errors,
                                 status=status.HTTP_400_BAD_REQUEST
                                 )
-            update_parents(request, item, item.size, item.date)
-        return Response(items_list,
-                        status=status.HTTP_200_OK)
-    else:
-        message = 'Введены некорректные данные'
-        return Response(message, status=status.HTTP_400_BAD_REQUEST)
-
-
-def update_parents(request, obj, size, date):
-    try:
-        parent_item = File.objects.get(id=obj.parentId_id)
-    except ObjectDoesNotExist:
-        parent_item = None
-    if parent_item:
-
-        if obj.size is not None:
-            if parent_item.size is None:
-                parent_item.size = 0
-            if request.method == 'POST':
-                parent_item.size += size
-                parent_item.date = date
+            logger.info('В базу данных добавлена запись')
+        else:
+            if check_not_valid_serializer(item_dict):
+                flag = False
+                item = update_file(flag, item_dict)
+                if not item:
+                    return Response(serializer.errors,
+                                    status=status.HTTP_400_BAD_REQUEST
+                                    )
+                logger.info('В базу данных добавлена запись')
             else:
-                parent_item.size -= size
-                parent_item.date = date
-        parent_item.save()
-        return update_parents(request, parent_item, size, date)
-    return parent_item
-
-
-@api_view(['GET'])
-def files_nodes(request):
-    items = File.objects.all()
-    serializer = FileSerializer(items, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+                return Response(serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST
+                                )
+        flag = True
+        update_parents(flag, item, item.size, item.date)
+        items_list.append(item_dict)
+    return Response(items_list,
+                    status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -78,25 +67,10 @@ def file_nodes(request, pk):
     return Response(item_dict, status=status.HTTP_200_OK)
 
 
-def get_children(item):
-    children = File.objects.filter(parentId=item.pk)
-    child_list = []
-    for child in children:
-        if child.type == 'FILE':
-            child_serializer = FileSerializer(child)
-            child_dict = dict(child_serializer.data)
-            child_dict['children'] = None
-            child_list.append(child_dict)
-        else:
-            child_serializer = FileSerializer(child)
-            child_dict = dict(child_serializer.data)
-            child_dict['children'] = get_children(child)
-            child_list.append(child_dict)
-    return child_list
-
-
 @api_view(['DELETE'])
 def file_delete(request, pk):
+    logger.info('Отправлен запрос на удаление файла')
+    flag = False
     try:
         item = File.objects.get(id=pk)
     except ObjectDoesNotExist:
@@ -110,19 +84,52 @@ def file_delete(request, pk):
     try:
         item.save()
     except ValidationError:
-        message = 'Validation Error for date field'
+        message = 'Validation Error'
         return Response(message, status=status.HTTP_400_BAD_REQUEST)
-    update_parents(request, item, item.size, item.date)
+    logger.info('Запрос прошел валидацию')
+    update_parents(flag, item, item.size, item.date)
     item.delete()
+    logger.info('Из базы данных удалена запись')
     return Response(status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 def files_updates(request):
-    # end_time = datetime.strptime(request.data.get("date"), "%Y-%m-%dT%H:%M:%SZ")
-    end_time = datetime.strptime(request.query_params.get("date"),
+    logger.info('Отправлен запрос на updates/')
+    try:
+        date = request.query_params["date"]
+    except KeyError:
+        message = 'Validation Error for date field'
+        return Response(message, status=status.HTTP_400_BAD_REQUEST)
+    end_time = datetime.strptime(date,
                                  "%Y-%m-%dT%H:%M:%SZ")
     start_time = end_time - timedelta(hours=24)
-    files = File.objects.filter(type='FILE', date__range=[start_time, end_time])
+    files = File.objects.filter(
+        type='FILE',
+        date__range=[start_time, end_time]
+    )
     serializer = FileSerializer(files, many=True)
+    logger.info('Запрос на updates/ успешно обработан')
     return Response(data=serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def file_history(request, pk):
+    logger.info('Отправлен запрос на history/')
+    file = get_object_or_404(File, id=pk)
+
+    start_time = request.data.get("dateStart")
+    end_time = request.data.get("dateEnd")
+    if start_time and end_time:
+        if file.changes_history:
+            versions = File.objects.filter(
+                new_file_version=pk,
+                date__range=[start_time, end_time]
+            )
+            serializer = FileSerializer(versions, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        message = 'Validation Error'
+        return Response(message, status=status.HTTP_400_BAD_REQUEST)
+    logger.info('Запрос на updates/ успешно обработан')
+    return Response(status=status.HTTP_400_BAD_REQUEST)

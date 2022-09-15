@@ -1,12 +1,14 @@
-from .models import File
 from rest_framework import serializers
-from django.core.exceptions import ObjectDoesNotExist,ValidationError
+
+from .models import File
+
 
 class FileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = File
         fields = ('id', 'url', 'size', 'date', 'type', 'parentId')
+        read_only_fields = ('changes_history', )
 
     def create(self, validated_data):
         if validated_data['type'] == 'FOLDER':
