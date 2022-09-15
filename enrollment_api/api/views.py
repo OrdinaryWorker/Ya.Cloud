@@ -114,23 +114,23 @@ def files_updates(request):
     return Response(data=serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-def file_history(request, pk):
-    logger.info('Отправлен запрос на /history/')
-    file = get_object_or_404(File, id=pk)
-
-    start_time = request.data.get("dateStart")
-    end_time = request.data.get("dateEnd")
-    if start_time and end_time:
-        if file.changes_history:
-            versions = File.objects.filter(
-                new_file_version=pk,
-                date__range=[start_time, end_time]
-            )
-            serializer = FileSerializer(versions, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-    else:
-        message = 'Validation Error'
-        return Response(message, status=status.HTTP_400_BAD_REQUEST)
-    logger.info('Запрос на updates/ успешно обработан')
-    return Response(status=status.HTTP_400_BAD_REQUEST)
+# @api_view(['GET'])
+# def file_history(request, pk):
+#     logger.info('Отправлен запрос на /history/')
+#     file = get_object_or_404(File, id=pk)
+#
+#     start_time = request.data.get("dateStart")
+#     end_time = request.data.get("dateEnd")
+#     if start_time and end_time:
+#         if file.changes_history:
+#             versions = File.objects.filter(
+#                 new_file_version=pk,
+#                 date__range=[start_time, end_time]
+#             )
+#             serializer = FileSerializer(versions, many=True)
+#             return Response(serializer.data, status=status.HTTP_200_OK)
+#     else:
+#         message = 'Validation Error'
+#         return Response(message, status=status.HTTP_400_BAD_REQUEST)
+#     logger.info('Запрос на updates/ успешно обработан')
+#     return Response(status=status.HTTP_400_BAD_REQUEST)
